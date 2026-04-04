@@ -1,0 +1,38 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama/qwen3:4b"
+      },
+      "thinkingDefault": "medium",
+      "timeoutSeconds": 300,
+      "sandbox": {
+        "mode": "off"
+      },
+    },
+    "list": [
+      {
+        "id": "gmail-agent",
+        "default": true
+      }
+    ]
+  },
+  "tools": {
+    "allow": ["exec", "read"],
+    "deny": ["write", "edit", "browser", "cron"]
+  },
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKey": "ollama-local",
+        "api": "openai-completions",
+        "models": [{"id": "qwen3:4b", "name": "qwen3:4b"}]
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local"
+  }
+}

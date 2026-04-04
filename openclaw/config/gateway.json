@@ -1,0 +1,46 @@
+{
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  "models": {
+    "default": "ollama/qwen3:4b",
+    "providers": {
+      "ollama": {
+        "type": "ollama",
+        "host": "http://localhost:11434",
+        "models": [
+          "qwen3:4b"
+        ]
+      }
+    }
+  },
+  "agent": {
+    "restricted": true,
+    "allowedTools": [
+      "list_recent_emails",
+      "get_email_content",
+      "summarize_emails",
+      "classify_emails",
+      "draft_reply",
+      "agent_query"
+    ],
+    "blockedCommands": [
+      "rm",
+      "sudo",
+      "chmod",
+      "kill",
+      "shutdown"
+    ]
+  },
+  "env": {
+    "OLLAMA_API_KEY": "ollama-local",
+    "OLLAMA_MAX_LOADED_MODELS": "3",
+    "OLLAMA_KEEP_ALIVE": "-1"
+  }
+}

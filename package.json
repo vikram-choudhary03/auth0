@@ -1,0 +1,16 @@
+{
+  "name": "hackathon",
+  "version": "1.0.0",
+  "description": "A secure Gmail agent for OpenClaw that uses **Auth0 Token Vault** for delegated access, **Ollama** for local inference, and **OpenClaw** in restricted mode for orchestration.",
+  "main": "index.js",
+  "dependencies": {
+    "openclaw": "^2026.4.2"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

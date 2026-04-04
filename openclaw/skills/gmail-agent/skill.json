@@ -1,0 +1,110 @@
+{
+  "name": "gmail-agent",
+  "displayName": "Gmail Agent",
+  "description": "Securely interact with Gmail through Auth0 Token Vault. Summarize, classify, read, and draft replies to emails using local Ollama models.",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "list_recent_emails",
+      "description": "Fetch the most recent emails from the user's Gmail inbox. Returns sender, subject, snippet, and date.",
+      "endpoint": "http://localhost:8001/api/agent/emails",
+      "method": "GET",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of emails to fetch (default 10, max 20)",
+          "default": 10
+        }
+      }
+    },
+    {
+      "name": "get_email_content",
+      "description": "Get the full content of a specific email by ID.",
+      "endpoint": "http://localhost:8001/api/agent/emails/{email_id}",
+      "method": "GET",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "required": true
+        },
+        "email_id": {
+          "type": "string",
+          "description": "The email message ID",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "summarize_emails",
+      "description": "Summarize recent emails. Optionally answer a specific question like 'What needs my attention today?' or 'Any emails from my boss?'",
+      "endpoint": "http://localhost:8001/api/agent/summarize",
+      "method": "POST",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "required": true
+        },
+        "query": {
+          "type": "string",
+          "description": "Optional: specific question about the emails"
+        }
+      }
+    },
+    {
+      "name": "classify_emails",
+      "description": "Classify recent emails into categories: urgent, needs-reply, informational, spam.",
+      "endpoint": "http://localhost:8001/api/agent/classify",
+      "method": "POST",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "draft_reply",
+      "description": "Draft a reply to a specific email. Does NOT send — user must review and approve.",
+      "endpoint": "http://localhost:8001/api/agent/draft",
+      "method": "POST",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "required": true
+        },
+        "email_id": {
+          "type": "string",
+          "description": "The email to reply to",
+          "required": true
+        },
+        "instruction": {
+          "type": "string",
+          "description": "How the user wants to reply, e.g. 'Accept the meeting' or 'Politely decline'",
+          "default": "Write a professional reply."
+        }
+      }
+    },
+    {
+      "name": "agent_query",
+      "description": "Ask a free-form question about your emails. The agent fetches context and answers using local AI.",
+      "endpoint": "http://localhost:8001/api/agent/query",
+      "method": "POST",
+      "parameters": {
+        "user_id": {
+          "type": "string",
+          "required": true
+        },
+        "message": {
+          "type": "string",
+          "description": "The user's question or instruction",
+          "required": true
+        }
+      }
+    }
+  ]
+}
