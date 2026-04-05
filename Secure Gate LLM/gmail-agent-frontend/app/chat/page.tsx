@@ -118,6 +118,15 @@ export default function ChatPage() {
     }
   }
 
+  // Track the current streaming message ID
+  const streamingMsgId = useRef<string | null>(null);
+
+  function updateMessage(id: string, content: string) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, content } : m))
+    );
+  }
+
   async function connectGateway() {
     const client = getGatewayClient();
 
@@ -125,17 +134,40 @@ export default function ChatPage() {
     client.onMessage((msg: GatewayMessage) => {
       if (msg.type === "status" && msg.status === "thinking") {
         setLoading(true);
+        // Create a placeholder message for streaming
+        const id = crypto.randomUUID();
+        streamingMsgId.current = id;
+        setMessages((prev) => [
+          ...prev,
+          { id, role: "assistant", content: "", timestamp: new Date() },
+        ]);
+        return;
+      }
+      if (msg.type === "delta") {
+        // Update the streaming message with new text
+        if (streamingMsgId.current) {
+          updateMessage(streamingMsgId.current, msg.fullText);
+        }
         return;
       }
       if (msg.type === "response") {
+        // Final response — update with complete text
+        if (streamingMsgId.current) {
+          updateMessage(streamingMsgId.current, msg.text);
+          streamingMsgId.current = null;
+        }
         setLoading(false);
-        addMessage("assistant", msg.text);
         inputRef.current?.focus();
         return;
       }
       if (msg.type === "error") {
+        if (streamingMsgId.current) {
+          updateMessage(streamingMsgId.current, `Error: ${msg.message}`);
+          streamingMsgId.current = null;
+        } else {
+          addMessage("assistant", `Error: ${msg.message}`);
+        }
         setLoading(false);
-        addMessage("assistant", `Error: ${msg.message}`);
         inputRef.current?.focus();
         return;
       }

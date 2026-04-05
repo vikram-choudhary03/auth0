@@ -23,6 +23,7 @@ export type GatewayMessage =
   | { type: "authenticated"; email: string }
   | { type: "auth_error"; message: string }
   | { type: "status"; status: string }
+  | { type: "delta"; delta: string; fullText: string }
   | { type: "response"; text: string; meta?: Record<string, unknown> }
   | { type: "error"; message: string }
   | { type: "event"; event: unknown };

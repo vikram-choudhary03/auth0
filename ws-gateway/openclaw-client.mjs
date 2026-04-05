@@ -243,6 +243,10 @@ export class OpenClawConnection {
 
         // Handle event frames
         if (frame.type === "event") {
+          // Pass to stream handler first (for streaming queries)
+          if (this._streamHandler) {
+            this._streamHandler(frame);
+          }
           this.onEvent(frame);
         }
       });
@@ -296,7 +300,100 @@ export class OpenClawConnection {
   }
 
   /**
-   * Send a message to the gmail-agent and get the response.
+   * Subscribe to a session's chat events for streaming.
+   * @param {string} sessionKey
+   */
+  async subscribeSession(sessionKey) {
+    await this.request("sessions.subscribe", { sessionKey });
+    this._subscribedSession = sessionKey;
+    console.log(`[openclaw] Subscribed to session: ${sessionKey}`);
+  }
+
+  /**
+   * Send a message with streaming — calls onDelta for each token, resolves with full text on completion.
+   * @param {string} message
+   * @param {{ onDelta?: (delta: string, fullText: string) => void }} opts
+   * @returns {Promise<{ text: string, meta: object }>}
+   */
+  async streamQuery(message, opts = {}) {
+    if (!this.connected) await this.connect();
+
+    const sessionKey = "agent:gmail-agent:main";
+
+    // Subscribe if not already
+    if (this._subscribedSession !== sessionKey) {
+      await this.subscribeSession(sessionKey);
+    }
+
+    const onDelta = opts.onDelta || (() => {});
+
+    return new Promise((resolve, reject) => {
+      let fullText = "";
+      let runId = null;
+
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Stream query timed out (120s)"));
+      }, 120_000);
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        this._streamHandler = null;
+      };
+
+      // Set up event handler for streaming
+      this._streamHandler = (frame) => {
+        if (frame.type !== "event" || frame.event !== "agent") return;
+
+        const payload = frame.payload;
+        if (payload.sessionKey !== sessionKey) return;
+
+        // Track the run
+        if (!runId && payload.runId) runId = payload.runId;
+
+        // Delta — incremental text
+        if (payload.stream === "assistant" && payload.data?.delta) {
+          fullText = payload.data.text || (fullText + payload.data.delta);
+          onDelta(payload.data.delta, fullText);
+          return;
+        }
+
+        // Final — agent run completed
+        if (payload.stream === "final" || payload.state === "final") {
+          cleanup();
+          resolve({
+            text: fullText || payload.data?.text || "",
+            meta: { runId, durationMs: payload.durationMs },
+          });
+          return;
+        }
+
+        // Error
+        if (payload.stream === "error" || payload.state === "error") {
+          cleanup();
+          reject(new Error(payload.errorMessage || payload.data?.text || "Stream error"));
+          return;
+        }
+      };
+
+      // Send the message
+      this.ws.send(
+        JSON.stringify({
+          type: "req",
+          id: crypto.randomUUID(),
+          method: "sessions.send",
+          params: {
+            key: sessionKey,
+            message,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        })
+      );
+    });
+  }
+
+  /**
+   * Send a message to the gmail-agent and get the response (non-streaming fallback).
    * @param {string} message
    * @returns {Promise<{ text: string, meta: object }>}
    */
@@ -312,7 +409,6 @@ export class OpenClawConnection {
       { expectFinal: true, timeoutMs: 120_000 }
     );
 
-    // Extract text from payloads
     const payloads = result?.result?.payloads || [];
     const text = payloads.map((p) => p.text).filter(Boolean).join("\n") || "";
     const meta = result?.result?.meta || {};

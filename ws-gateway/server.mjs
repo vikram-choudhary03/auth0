@@ -216,14 +216,16 @@ wss.on("connection", (ws) => {
       send(ws, { type: "status", status: "thinking" });
 
       try {
-        const result = await state.ocConn.query(msg.message);
+        const result = await state.ocConn.streamQuery(msg.message, {
+          onDelta: (delta, fullText) => {
+            send(ws, { type: "delta", delta, fullText });
+          },
+        });
         send(ws, {
           type: "response",
           text: result.text,
           meta: {
             durationMs: result.meta?.durationMs,
-            model: result.meta?.agentMeta?.model,
-            provider: result.meta?.agentMeta?.provider,
           },
         });
       } catch (err) {
