@@ -91,6 +91,14 @@ async def send_email(req: SendEmailRequest, authorization: Optional[str] = Heade
     return result
 
 
+@app.get("/api/agent/confirm-send")
+async def confirm_send(user_id: str = "default", authorization: Optional[str] = Header(default=None)):
+    """Confirm and send the most recently drafted email. Simple endpoint the LLM can call."""
+    token = _extract_token(authorization)
+    result = await gmail_tools.confirm_latest_send(user_id, auth_token=token)
+    return result
+
+
 # ── OpenClaw proxy — routes queries through OpenClaw gateway ──
 
 

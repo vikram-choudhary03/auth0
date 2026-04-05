@@ -99,6 +99,35 @@ async def send_email(
         return resp.json()
 
 
+async def confirm_latest_send(user_id: str, auth_token: str = "") -> dict:
+    """Confirm and send the most recently pending email."""
+    if not _pending_sends:
+        return {"status": "error", "message": "No pending email to send. Draft one first."}
+
+    # Get the most recent pending send
+    confirmation_id = list(_pending_sends.keys())[-1]
+    pending = _pending_sends.pop(confirmation_id)
+
+    token = await gmail_client._resolve_token(user_id, auth_token)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    async with httpx.AsyncClient(base_url=settings.phase_a_base_url, timeout=30) as client:
+        resp = await client.post(
+            "/api/gmail/send",
+            json={
+                "to": pending["to"],
+                "subject": pending["subject"],
+                "body": pending["body"],
+                "confirm": True,
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def agent_query(user_id: str, message: str, auth_token: str = "") -> str:
     """Free-form agent chat — fetches context and lets Ollama answer."""
     emails = await gmail_client.list_recent_emails(user_id, count=10, auth_token=auth_token)
