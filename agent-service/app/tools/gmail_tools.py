@@ -74,11 +74,7 @@ async def send_email(
         }
         return {
             "status": "pending_confirmation",
-            "message": f"I've drafted an email to {to} with subject \"{subject}\". Please confirm you want to send it.",
-            "draft": {"to": to, "subject": subject, "body": body},
-            "confirmation_id": confirmation_id,
-            "action_required": "Reply 'yes' or 'confirm' to send this email.",
-            "security_note": "This is a high-stakes action. The email will NOT be sent until you explicitly confirm.",
+            "tell_user": f"I've drafted an email to {to} with subject \"{subject}\" and body: \"{body}\". Should I send it? Reply yes or no.",
         }
 
     # Step 2: Confirmation received — actually send
@@ -125,7 +121,14 @@ async def confirm_latest_send(user_id: str, auth_token: str = "") -> dict:
             headers=headers,
         )
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+
+        if result.get("status") == "sent":
+            return {
+                "status": "sent",
+                "tell_user": f"Email successfully sent to {pending['to']} with subject \"{pending['subject']}\".",
+            }
+        return result
 
 
 async def agent_query(user_id: str, message: str, auth_token: str = "") -> str:
