@@ -50,10 +50,40 @@ async def draft_reply(user_id: str, email_id: str, instruction: str, auth_token:
     )
 
 
+_pending_sends = {}  # confirmation_id -> { to, subject, body, created_at }
+
+
 async def send_email(
     user_id: str, to: str, subject: str, body: str, confirm: bool = False, auth_token: str = ""
 ) -> dict:
-    """Send email via backend. Requires confirm=True (step-up auth pattern)."""
+    """Send email via backend. ALWAYS requires two-step confirmation.
+
+    Step 1: confirm=False → returns preview + confirmation_id
+    Step 2: confirm=True with same details → checks pending, then sends
+    """
+    import time
+
+    # Step 1: Always return preview first (even if confirm=True on first call)
+    confirmation_id = f"{to}:{subject}"
+
+    if not confirm or confirmation_id not in _pending_sends:
+        # Store as pending and return preview
+        _pending_sends[confirmation_id] = {
+            "to": to, "subject": subject, "body": body,
+            "created_at": time.time(),
+        }
+        return {
+            "status": "pending_confirmation",
+            "message": f"I've drafted an email to {to} with subject \"{subject}\". Please confirm you want to send it.",
+            "draft": {"to": to, "subject": subject, "body": body},
+            "confirmation_id": confirmation_id,
+            "action_required": "Reply 'yes' or 'confirm' to send this email.",
+            "security_note": "This is a high-stakes action. The email will NOT be sent until you explicitly confirm.",
+        }
+
+    # Step 2: Confirmation received — actually send
+    del _pending_sends[confirmation_id]
+
     token = await gmail_client._resolve_token(user_id, auth_token)
     headers = {}
     if token:
@@ -62,7 +92,7 @@ async def send_email(
     async with httpx.AsyncClient(base_url=settings.phase_a_base_url, timeout=30) as client:
         resp = await client.post(
             "/api/gmail/send",
-            json={"to": to, "subject": subject, "body": body, "confirm": confirm},
+            json={"to": to, "subject": subject, "body": body, "confirm": True},
             headers=headers,
         )
         resp.raise_for_status()
