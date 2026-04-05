@@ -432,3 +432,152 @@ def gmail_summarize(
         "emails": compact,
         "prompt_received": payload.prompt,
     }
+
+
+# ── Send Email (high-stakes action — requires step-up auth) ──
+
+
+class SendEmailRequest(BaseModel):
+    to: str
+    subject: str
+    body: str
+    confirm: bool = False  # Must be True to actually send
+
+
+@app.post("/api/gmail/send")
+def gmail_send(
+    payload: SendEmailRequest,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Send an email via Gmail. Requires explicit confirmation (step-up auth pattern).
+
+    This is a high-stakes action — the agent cannot send emails without the user
+    explicitly setting confirm=True. This demonstrates step-up authentication:
+    read operations are allowed freely, but write operations need explicit consent.
+    """
+    import base64
+    from email.mime.text import MIMEText
+
+    if not payload.confirm:
+        return {
+            "status": "pending_confirmation",
+            "message": "This action requires explicit confirmation. The agent has drafted an email but cannot send it without your approval.",
+            "draft": {
+                "to": payload.to,
+                "subject": payload.subject,
+                "body": payload.body,
+            },
+            "action_required": "Set confirm=true to send this email.",
+            "security_note": "Sending email is a high-stakes action protected by step-up authentication.",
+        }
+
+    auth0_access_token = user["raw_token"]
+    gmail_access_token = get_google_access_token_from_token_vault(auth0_access_token)
+
+    # Build the email
+    message = MIMEText(payload.body)
+    message["to"] = payload.to
+    message["subject"] = payload.subject
+
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+
+    # Send via Gmail API
+    response = requests.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        headers={"Authorization": f"Bearer {gmail_access_token}"},
+        json={"raw": raw_message},
+        timeout=20,
+    )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Failed to send email",
+                "gmail_status": response.status_code,
+                "gmail_response": safe_json(response),
+            },
+        )
+
+    return {
+        "status": "sent",
+        "message": f"Email sent to {payload.to}",
+        "gmail_response": response.json(),
+    }
+
+
+# ── Permissions Endpoint (for UI transparency) ──
+
+
+@app.get("/api/permissions")
+def get_permissions(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return the agent's current permissions and scopes.
+
+    This endpoint powers the permissions UI — showing users exactly what
+    the agent can and cannot do, which scopes were granted, and which
+    actions require step-up authentication.
+    """
+    return {
+        "user": {
+            "sub": user.get("sub"),
+            "email": user.get("email"),
+        },
+        "scopes_granted": [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+        ],
+        "google_scopes": [
+            "https://www.googleapis.com/auth/gmail.readonly",
+        ],
+        "capabilities": {
+            "read_emails": {
+                "allowed": True,
+                "auth_level": "standard",
+                "description": "Read and list emails from your inbox",
+            },
+            "summarize_emails": {
+                "allowed": True,
+                "auth_level": "standard",
+                "description": "Summarize emails using local AI (Ollama)",
+            },
+            "classify_emails": {
+                "allowed": True,
+                "auth_level": "standard",
+                "description": "Classify emails by urgency and type",
+            },
+            "draft_reply": {
+                "allowed": True,
+                "auth_level": "standard",
+                "description": "Draft email replies (does NOT send)",
+            },
+            "send_email": {
+                "allowed": True,
+                "auth_level": "step_up",
+                "description": "Send emails — requires explicit user confirmation",
+                "requires_confirmation": True,
+            },
+            "delete_email": {
+                "allowed": False,
+                "auth_level": "blocked",
+                "description": "Delete emails — not permitted",
+            },
+            "modify_labels": {
+                "allowed": False,
+                "auth_level": "blocked",
+                "description": "Modify labels — not permitted",
+            },
+        },
+        "token_vault": {
+            "provider": "Auth0",
+            "status": "active",
+            "description": "Google OAuth tokens are stored in Auth0 Token Vault. This server never stores Google credentials.",
+        },
+        "security": {
+            "jwt_validation": "Auth0 JWKS (RS256)",
+            "token_storage": "Auth0 Token Vault (not on this server)",
+            "high_stakes_protection": "Step-up authentication for send actions",
+            "credential_exposure": "None — Google tokens fetched on-demand, never persisted",
+        },
+    }

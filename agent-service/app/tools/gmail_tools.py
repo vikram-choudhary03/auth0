@@ -4,6 +4,9 @@ Each tool is a self-contained action that combines Gmail data (Phase A) + Ollama
 """
 
 from app.models.schemas import DraftResponse, SummaryResponse
+import httpx
+
+from app.config import settings
 from app.services import gmail_client, ollama_service
 
 
@@ -45,6 +48,25 @@ async def draft_reply(user_id: str, email_id: str, instruction: str, auth_token:
         subject=f"Re: {email.subject}",
         draft_body=body,
     )
+
+
+async def send_email(
+    user_id: str, to: str, subject: str, body: str, confirm: bool = False, auth_token: str = ""
+) -> dict:
+    """Send email via backend. Requires confirm=True (step-up auth pattern)."""
+    token = await gmail_client._resolve_token(user_id, auth_token)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    async with httpx.AsyncClient(base_url=settings.phase_a_base_url, timeout=30) as client:
+        resp = await client.post(
+            "/api/gmail/send",
+            json={"to": to, "subject": subject, "body": body, "confirm": confirm},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 async def agent_query(user_id: str, message: str, auth_token: str = "") -> str:

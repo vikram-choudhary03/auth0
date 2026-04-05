@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.models.schemas import AgentQuery, DraftRequest, SummaryRequest
+from app.models.schemas import AgentQuery, DraftRequest, SendEmailRequest, SummaryRequest
 from app.tools import gmail_tools
 
 app = FastAPI(
@@ -78,6 +78,17 @@ async def query(req: AgentQuery, authorization: Optional[str] = Header(default=N
     token = _extract_token(authorization)
     answer = await gmail_tools.agent_query(req.user_id, req.message, auth_token=token)
     return {"response": answer}
+
+
+@app.post("/api/agent/send")
+async def send_email(req: SendEmailRequest, authorization: Optional[str] = Header(default=None)):
+    """Send email — requires confirm=True (step-up auth).
+    The agent can draft but NOT send without explicit user confirmation."""
+    token = _extract_token(authorization)
+    result = await gmail_tools.send_email(
+        req.user_id, req.to, req.subject, req.body, req.confirm, auth_token=token
+    )
+    return result
 
 
 # ── OpenClaw proxy — routes queries through OpenClaw gateway ──

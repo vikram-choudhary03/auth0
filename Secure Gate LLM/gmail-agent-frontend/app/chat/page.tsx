@@ -26,6 +26,11 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  ShieldAlert,
+  X,
 } from "lucide-react";
 
 type Message = {
@@ -45,6 +50,7 @@ export default function ChatPage() {
   const [gmailVerified, setGmailVerified] = useState<
     "pending" | "success" | "error"
   >("pending");
+  const [showPermissions, setShowPermissions] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const gatewayConnected = useRef(false);
@@ -236,12 +242,91 @@ export default function ChatPage() {
             </span>
           </div>
           <Separator orientation="vertical" className="h-6" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPermissions(!showPermissions)}
+            className="gap-2"
+          >
+            <Shield className="w-3.5 h-3.5" />
+            Permissions
+          </Button>
+          <Separator orientation="vertical" className="h-6" />
           <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
             <LogOut className="w-3.5 h-3.5" />
             Sign out
           </Button>
         </div>
       </header>
+
+      {/* Permissions Panel */}
+      {showPermissions && (
+        <div className="border-b bg-card px-6 py-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                Agent Permissions & Security
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowPermissions(false)}
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              {/* Allowed Actions */}
+              <Card className="p-3">
+                <h4 className="font-medium mb-2 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  Allowed (Standard Auth)
+                </h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>Read & list emails</li>
+                  <li>Summarize emails (local AI)</li>
+                  <li>Classify by urgency</li>
+                  <li>Draft replies (no send)</li>
+                </ul>
+              </Card>
+
+              {/* Step-up Actions */}
+              <Card className="p-3">
+                <h4 className="font-medium mb-2 flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                  Requires Confirmation
+                </h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>Send email (step-up auth)</li>
+                  <li>Agent must get your OK first</li>
+                </ul>
+              </Card>
+
+              {/* Blocked Actions */}
+              <Card className="p-3">
+                <h4 className="font-medium mb-2 flex items-center gap-1.5">
+                  <ShieldX className="w-3.5 h-3.5 text-destructive" />
+                  Blocked
+                </h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>Delete emails</li>
+                  <li>Modify labels</li>
+                  <li>Access contacts</li>
+                </ul>
+              </Card>
+            </div>
+
+            <div className="mt-3 p-2 rounded bg-muted/50 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Auth0 Token Vault:</span>{" "}
+              Google credentials are stored in Auth0 — never on this server. Tokens
+              are fetched on-demand and never exposed to the AI model.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>

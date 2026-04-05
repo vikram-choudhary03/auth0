@@ -42,3 +42,11 @@ class DraftResponse(BaseModel):
 class AgentQuery(BaseModel):
     user_id: str
     message: str
+
+
+class SendEmailRequest(BaseModel):
+    user_id: str
+    to: str
+    subject: str
+    body: str
+    confirm: bool = False
