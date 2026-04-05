@@ -9,6 +9,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from pydantic import BaseModel
 from app.models.schemas import AgentQuery, DraftRequest, SendEmailRequest, SummaryRequest
 from app.tools import gmail_tools
 

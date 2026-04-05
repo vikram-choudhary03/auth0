@@ -100,35 +100,44 @@ async def confirm_latest_send(user_id: str, auth_token: str = "") -> dict:
     if not _pending_sends:
         return {"status": "error", "message": "No pending email to send. Draft one first."}
 
-    # Get the most recent pending send
+    # Get the most recent pending send (don't pop yet — only remove on success)
     confirmation_id = list(_pending_sends.keys())[-1]
-    pending = _pending_sends.pop(confirmation_id)
+    pending = _pending_sends[confirmation_id]
 
     token = await gmail_client._resolve_token(user_id, auth_token)
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    async with httpx.AsyncClient(base_url=settings.phase_a_base_url, timeout=30) as client:
-        resp = await client.post(
-            "/api/gmail/send",
-            json={
-                "to": pending["to"],
-                "subject": pending["subject"],
-                "body": pending["body"],
-                "confirm": True,
-            },
-            headers=headers,
-        )
-        resp.raise_for_status()
-        result = resp.json()
+    try:
+        async with httpx.AsyncClient(base_url=settings.phase_a_base_url, timeout=30) as client:
+            resp = await client.post(
+                "/api/gmail/send",
+                json={
+                    "to": pending["to"],
+                    "subject": pending["subject"],
+                    "body": pending["body"],
+                    "confirm": True,
+                },
+                headers=headers,
+            )
+            resp.raise_for_status()
+            result = resp.json()
 
-        if result.get("status") == "sent":
-            return {
-                "status": "sent",
-                "tell_user": f"Email successfully sent to {pending['to']} with subject \"{pending['subject']}\".",
-            }
-        return result
+            # Only remove from pending on success
+            del _pending_sends[confirmation_id]
+
+            if result.get("status") == "sent":
+                return {
+                    "status": "sent",
+                    "tell_user": f"Email successfully sent to {pending['to']} with subject \"{pending['subject']}\".",
+                }
+            return result
+    except Exception as e:
+        return {
+            "status": "error",
+            "tell_user": f"Failed to send email: {str(e)}. The draft is still saved — try again.",
+        }
 
 
 async def agent_query(user_id: str, message: str, auth_token: str = "") -> str:
