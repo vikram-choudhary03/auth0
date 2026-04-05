@@ -8,10 +8,10 @@ import {
   fetchUserProfile,
   fetchGmailProfile,
   fetchRecentEmails,
-  queryAgent,
   type UserProfile,
   type GmailProfile,
 } from "@/lib/api";
+import { getGatewayClient, type GatewayMessage } from "@/lib/ws";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ export default function ChatPage() {
   >("pending");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const gatewayConnected = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -54,6 +55,11 @@ export default function ChatPage() {
       return;
     }
     verifyConnection();
+    connectGateway();
+
+    return () => {
+      getGatewayClient().disconnect();
+    };
   }, [router]);
 
   useEffect(() => {
@@ -106,6 +112,40 @@ export default function ChatPage() {
     }
   }
 
+  async function connectGateway() {
+    const client = getGatewayClient();
+
+    // Listen for messages from the gateway
+    client.onMessage((msg: GatewayMessage) => {
+      if (msg.type === "status" && msg.status === "thinking") {
+        setLoading(true);
+        return;
+      }
+      if (msg.type === "response") {
+        setLoading(false);
+        addMessage("assistant", msg.text);
+        inputRef.current?.focus();
+        return;
+      }
+      if (msg.type === "error") {
+        setLoading(false);
+        addMessage("assistant", `Error: ${msg.message}`);
+        inputRef.current?.focus();
+        return;
+      }
+    });
+
+    try {
+      await client.connect();
+      gatewayConnected.current = true;
+      console.log("[ws] Gateway connected");
+    } catch (err) {
+      console.error("[ws] Gateway connection failed:", err);
+      // Fallback: will use HTTP if WS is not available
+      gatewayConnected.current = false;
+    }
+  }
+
   function addMessage(role: Message["role"], content: string) {
     setMessages((prev) => [
       ...prev,
@@ -124,17 +164,32 @@ export default function ChatPage() {
 
     setInput("");
     addMessage("user", text);
-    setLoading(true);
 
-    try {
-      const data = await queryAgent(user?.sub || "", text);
-      addMessage("assistant", data.response);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      addMessage("assistant", `Error: ${msg}`);
-    } finally {
-      setLoading(false);
-      inputRef.current?.focus();
+    if (gatewayConnected.current) {
+      // Real-time WebSocket path
+      try {
+        await getGatewayClient().send(text);
+        // Response handled by onMessage listener in connectGateway()
+      } catch (err) {
+        setLoading(false);
+        const msg = err instanceof Error ? err.message : "Something went wrong";
+        addMessage("assistant", `Error: ${msg}`);
+        inputRef.current?.focus();
+      }
+    } else {
+      // HTTP fallback (legacy path)
+      setLoading(true);
+      try {
+        const { queryAgent } = await import("@/lib/api");
+        const data = await queryAgent(user?.sub || "", text);
+        addMessage("assistant", data.response);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Something went wrong";
+        addMessage("assistant", `Error: ${msg}`);
+      } finally {
+        setLoading(false);
+        inputRef.current?.focus();
+      }
     }
   }
 
