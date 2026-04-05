@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {
+    root: "/data/hackathon/Secure Gate LLM/gmail-agent-frontend",
+  },
 };
 
 export default nextConfig;
