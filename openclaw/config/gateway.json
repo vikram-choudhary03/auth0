@@ -9,14 +9,25 @@
     }
   },
   "models": {
-    "default": "ollama/qwen3:4b",
+    "default": "groq/llama-3.3-70b-versatile",
+    "fallbacks": [
+      "google/gemini-2.5-flash",
+      "ollama/qwen3:8b"
+    ],
     "providers": {
+      "groq": {
+        "type": "openai-compatible",
+        "baseUrl": "https://api.groq.com/openai/v1",
+        "models": ["llama-3.3-70b-versatile"]
+      },
+      "google": {
+        "type": "google",
+        "models": ["gemini-2.5-flash"]
+      },
       "ollama": {
         "type": "ollama",
         "host": "http://localhost:11434",
-        "models": [
-          "qwen3:4b"
-        ]
+        "models": ["qwen3:8b"]
       }
     }
   },
@@ -28,6 +39,8 @@
       "summarize_emails",
       "classify_emails",
       "draft_reply",
+      "send_email",
+      "confirm_send",
       "agent_query"
     ],
     "blockedCommands": [
@@ -37,10 +50,5 @@
       "kill",
       "shutdown"
     ]
-  },
-  "env": {
-    "OLLAMA_API_KEY": "ollama-local",
-    "OLLAMA_MAX_LOADED_MODELS": "3",
-    "OLLAMA_KEEP_ALIVE": "-1"
   }
 }

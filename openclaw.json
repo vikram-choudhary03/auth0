@@ -2,7 +2,11 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "ollama/qwen3:4b"
+        "primary": "groq/llama-3.3-70b-versatile",
+        "fallbacks": [
+          "google/gemini-2.5-flash",
+          "ollama/qwen3:8b"
+        ]
       },
       "thinkingDefault": "medium",
       "timeoutSeconds": 300,
@@ -32,14 +36,35 @@
   },
   "models": {
     "providers": {
+      "groq": {
+        "baseUrl": "https://api.groq.com/openai/v1",
+        "apiKey": "${GROQ_API_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "llama-3.3-70b-versatile",
+            "name": "Llama 3.3 70B (Groq)"
+          }
+        ]
+      },
+      "google": {
+        "apiKey": "${GOOGLE_AI_API_KEY}",
+        "api": "google-generative-ai",
+        "models": [
+          {
+            "id": "gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash"
+          }
+        ]
+      },
       "ollama": {
         "baseUrl": "http://localhost:11434/v1",
         "apiKey": "sk-ollama-noauth",
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen3:4b",
-            "name": "qwen3:4b"
+            "id": "qwen3:8b",
+            "name": "Qwen3 8B (Local)"
           }
         ]
       }
