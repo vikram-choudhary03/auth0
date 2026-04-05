@@ -118,7 +118,13 @@ async def openclaw_query(req: AgentQuery, authorization: Optional[str] = Header(
         # Try to parse JSON response
         try:
             data = json.loads(output)
-            response_text = data.get("result", {}).get("text", "") or data.get("text", "") or output
+            # OpenClaw returns: { result: { payloads: [{ text: "..." }] } }
+            result = data.get("result", {})
+            payloads = result.get("payloads", [])
+            if payloads:
+                response_text = payloads[0].get("text", "")
+            else:
+                response_text = result.get("text", "") or data.get("text", "") or output
         except json.JSONDecodeError:
             # If not JSON, use raw output
             response_text = output or err_output or "No response from OpenClaw"

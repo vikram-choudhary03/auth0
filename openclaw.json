@@ -13,7 +13,8 @@
     "list": [
       {
         "id": "gmail-agent",
-        "default": true
+        "default": true,
+        "workspace": "/home/wexa/.openclaw/agents/gmail-agent/workspace"
       }
     ]
   },
@@ -33,7 +34,7 @@
     "providers": {
       "ollama": {
         "baseUrl": "http://localhost:11434/v1",
-        "apiKey": "ollama-local",
+        "apiKey": "sk-ollama-noauth",
         "api": "openai-completions",
         "models": [
           {
