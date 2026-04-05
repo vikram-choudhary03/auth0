@@ -48,6 +48,7 @@
         ]
       },
       "google": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
         "apiKey": "${GOOGLE_AI_API_KEY}",
         "api": "google-generative-ai",
         "models": [
