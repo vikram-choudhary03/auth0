@@ -2,14 +2,14 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "groq/llama-3.3-70b-versatile",
+        "primary": "google/gemini-2.5-flash",
         "fallbacks": [
-          "google/gemini-2.5-flash",
+          "groq/llama-3.3-70b-versatile",
           "ollama/qwen3:8b"
         ]
       },
       "thinkingDefault": "medium",
-      "timeoutSeconds": 300,
+      "timeoutSeconds": 99999,
       "sandbox": {
         "mode": "off"
       }

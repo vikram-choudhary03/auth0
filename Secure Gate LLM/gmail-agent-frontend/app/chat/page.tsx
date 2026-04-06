@@ -11,7 +11,14 @@ import {
   type UserProfile,
   type GmailProfile,
 } from "@/lib/api";
-import { getGatewayClient, type GatewayMessage } from "@/lib/ws";
+import {
+  connectGateway as wsConnect,
+  onGatewayMessage,
+  sendQuery,
+  isGatewayConnected,
+  disconnectGateway,
+  type GatewayMessage,
+} from "@/lib/ws";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,6 +58,7 @@ export default function ChatPage() {
     "pending" | "success" | "error"
   >("pending");
   const [showPermissions, setShowPermissions] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const gatewayConnected = useRef(false);
@@ -61,10 +69,10 @@ export default function ChatPage() {
       return;
     }
     verifyConnection();
-    connectGateway();
+    initGateway();
 
     return () => {
-      getGatewayClient().disconnect();
+      disconnectGateway();
     };
   }, [router]);
 
@@ -127,14 +135,11 @@ export default function ChatPage() {
     );
   }
 
-  async function connectGateway() {
-    const client = getGatewayClient();
-
+  async function initGateway() {
     // Listen for messages from the gateway
-    client.onMessage((msg: GatewayMessage) => {
+    onGatewayMessage((msg: GatewayMessage) => {
       if (msg.type === "status" && msg.status === "thinking") {
         setLoading(true);
-        // Create a placeholder message for streaming
         const id = crypto.randomUUID();
         streamingMsgId.current = id;
         setMessages((prev) => [
@@ -144,17 +149,18 @@ export default function ChatPage() {
         return;
       }
       if (msg.type === "delta") {
-        // Update the streaming message with new text
         if (streamingMsgId.current) {
           updateMessage(streamingMsgId.current, msg.fullText);
         }
         return;
       }
       if (msg.type === "response") {
-        // Final response — update with complete text
         if (streamingMsgId.current) {
           updateMessage(streamingMsgId.current, msg.text);
           streamingMsgId.current = null;
+        }
+        if (msg.text?.includes("Should I send") || msg.text?.includes("confirm")) {
+          setPendingConfirm(true);
         }
         setLoading(false);
         inputRef.current?.focus();
@@ -173,15 +179,8 @@ export default function ChatPage() {
       }
     });
 
-    try {
-      await client.connect();
-      gatewayConnected.current = true;
-      console.log("[ws] Gateway connected");
-    } catch (err) {
-      console.error("[ws] Gateway connection failed:", err);
-      // Fallback: will use HTTP if WS is not available
-      gatewayConnected.current = false;
-    }
+    const connected = await wsConnect();
+    gatewayConnected.current = connected;
   }
 
   function addMessage(role: Message["role"], content: string) {
@@ -203,16 +202,12 @@ export default function ChatPage() {
     setInput("");
     addMessage("user", text);
 
-    if (gatewayConnected.current) {
+    if (isGatewayConnected()) {
       // Real-time WebSocket path
-      try {
-        await getGatewayClient().send(text);
-        // Response handled by onMessage listener in connectGateway()
-      } catch (err) {
-        setLoading(false);
-        const msg = err instanceof Error ? err.message : "Something went wrong";
-        addMessage("assistant", `Error: ${msg}`);
-        inputRef.current?.focus();
+      const sent = sendQuery(text);
+      if (!sent) {
+        setLoading(true);
+        // Fallback below
       }
     } else {
       // HTTP fallback (legacy path)

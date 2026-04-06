@@ -1,4 +1,4 @@
-"""Tests for Ollama service — tests actual Ollama integration with qwen3:4b.
+"""Tests for Ollama service — tests actual Ollama integration with qwen3:8b.
 These tests call the real Ollama instance, so they require Ollama to be running.
 Mark with pytest.mark.integration to skip in CI.
 """

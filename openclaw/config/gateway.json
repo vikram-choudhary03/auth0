@@ -9,9 +9,9 @@
     }
   },
   "models": {
-    "default": "groq/llama-3.3-70b-versatile",
+    "default": "google/gemini-2.5-flash",
     "fallbacks": [
-      "google/gemini-2.5-flash",
+      "groq/llama-3.3-70b-versatile",
       "ollama/qwen3:8b"
     ],
     "providers": {

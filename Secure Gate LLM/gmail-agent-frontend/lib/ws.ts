@@ -1,17 +1,5 @@
 /**
  * WebSocket client for the SecureGate Gateway.
- *
- * Protocol:
- *   Client → Gateway:
- *     { type: "auth", token: "<Auth0 JWT>" }
- *     { type: "query", message: "..." }
- *
- *   Gateway → Client:
- *     { type: "authenticated", email: "..." }
- *     { type: "auth_error", message: "..." }
- *     { type: "status", status: "thinking" }
- *     { type: "response", text: "...", meta: {...} }
- *     { type: "error", message: "..." }
  */
 
 import { getAccessToken } from "./auth";
@@ -30,40 +18,62 @@ export type GatewayMessage =
 
 type MessageHandler = (msg: GatewayMessage) => void;
 
-export class GatewayClient {
-  private ws: WebSocket | null = null;
-  private handlers: Set<MessageHandler> = new Set();
-  private authenticated = false;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private _connectPromise: Promise<void> | null = null;
+// Module-level state — survives React strict mode re-renders
+let _ws: WebSocket | null = null;
+let _authenticated = false;
+let _connecting = false;
+let _handlers: Set<MessageHandler> = new Set();
 
-  /** Subscribe to messages from the gateway. Returns an unsubscribe function. */
-  onMessage(handler: MessageHandler): () => void {
-    this.handlers.add(handler);
-    return () => this.handlers.delete(handler);
+function emit(msg: GatewayMessage) {
+  for (const handler of _handlers) {
+    try {
+      handler(msg);
+    } catch (err) {
+      console.error("[ws] handler error:", err);
+    }
+  }
+}
+
+export function onGatewayMessage(handler: MessageHandler): () => void {
+  _handlers.add(handler);
+  return () => _handlers.delete(handler);
+}
+
+export async function connectGateway(): Promise<boolean> {
+  // Already connected
+  if (_ws && _authenticated && _ws.readyState === WebSocket.OPEN) {
+    console.log("[ws] Already connected");
+    return true;
   }
 
-  /** Connect and authenticate with the gateway. */
-  async connect(): Promise<void> {
-    if (this._connectPromise) return this._connectPromise;
+  // Already connecting
+  if (_connecting) {
+    console.log("[ws] Connection already in progress");
+    return false;
+  }
 
-    this._connectPromise = new Promise<void>((resolve, reject) => {
-      const token = getAccessToken();
-      if (!token) {
-        reject(new Error("No access token"));
-        return;
-      }
+  const token = getAccessToken();
+  if (!token) {
+    console.error("[ws] No access token available");
+    return false;
+  }
 
+  _connecting = true;
+  console.log("[ws] Connecting to gateway:", WS_URL);
+
+  return new Promise<boolean>((resolve) => {
+    try {
       const ws = new WebSocket(WS_URL);
-      this.ws = ws;
 
       const timeout = setTimeout(() => {
-        reject(new Error("Connection timeout"));
+        console.error("[ws] Connection timeout");
         ws.close();
-      }, 15_000);
+        _connecting = false;
+        resolve(false);
+      }, 10_000);
 
       ws.onopen = () => {
-        // Send auth as first message
+        console.log("[ws] WebSocket open, sending auth...");
         ws.send(JSON.stringify({ type: "auth", token }));
       };
 
@@ -75,82 +85,63 @@ export class GatewayClient {
           return;
         }
 
-        // Handle auth response
         if (msg.type === "authenticated") {
-          this.authenticated = true;
+          _ws = ws;
+          _authenticated = true;
+          _connecting = false;
           clearTimeout(timeout);
-          resolve();
-        }
-
-        if (msg.type === "auth_error") {
+          console.log("[ws] Gateway authenticated!", msg.email);
+          resolve(true);
+        } else if (msg.type === "auth_error") {
           clearTimeout(timeout);
-          reject(new Error(msg.message));
+          _connecting = false;
+          console.error("[ws] Auth failed:", msg.message);
           ws.close();
-          return;
+          resolve(false);
         }
 
-        // Notify all handlers
-        this.emit(msg);
+        // Forward all messages to handlers
+        emit(msg);
       };
 
       ws.onclose = () => {
-        this.authenticated = false;
-        this.ws = null;
-        this._connectPromise = null;
+        console.log("[ws] Connection closed");
+        _ws = null;
+        _authenticated = false;
+        _connecting = false;
       };
 
-      ws.onerror = () => {
+      ws.onerror = (err) => {
+        console.error("[ws] WebSocket error:", err);
         clearTimeout(timeout);
-        reject(new Error("WebSocket connection failed"));
+        _connecting = false;
+        resolve(false);
       };
-    });
-
-    return this._connectPromise;
-  }
-
-  /** Send a query to the agent. */
-  async send(message: string): Promise<void> {
-    if (!this.ws || !this.authenticated) {
-      await this.connect();
+    } catch (err) {
+      console.error("[ws] Failed to create WebSocket:", err);
+      _connecting = false;
+      resolve(false);
     }
-    this.ws?.send(JSON.stringify({ type: "query", message }));
-  }
-
-  /** Disconnect from the gateway. */
-  disconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-    this.authenticated = false;
-    this._connectPromise = null;
-  }
-
-  get isConnected(): boolean {
-    return this.authenticated && this.ws?.readyState === WebSocket.OPEN;
-  }
-
-  private emit(msg: GatewayMessage) {
-    for (const handler of this.handlers) {
-      try {
-        handler(msg);
-      } catch (err) {
-        console.error("[ws] handler error:", err);
-      }
-    }
-  }
+  });
 }
 
-// Singleton instance
-let _client: GatewayClient | null = null;
-
-export function getGatewayClient(): GatewayClient {
-  if (!_client) {
-    _client = new GatewayClient();
+export function sendQuery(message: string): boolean {
+  if (!_ws || !_authenticated || _ws.readyState !== WebSocket.OPEN) {
+    return false;
   }
-  return _client;
+  _ws.send(JSON.stringify({ type: "query", message }));
+  return true;
+}
+
+export function isGatewayConnected(): boolean {
+  return _authenticated && _ws?.readyState === WebSocket.OPEN;
+}
+
+export function disconnectGateway(): void {
+  if (_ws) {
+    _ws.close();
+    _ws = null;
+  }
+  _authenticated = false;
+  _connecting = false;
 }
