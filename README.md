@@ -1,4 +1,4 @@
-# SecureGate LLM — Auth0 Authorized to Act Hackathon
+# Gmail Agent— Auth0 Authorized to Act Hackathon
 
 > **An AI-powered Gmail agent where Auth0 Token Vault is the single secure layer between the agent and your data. The AI can read, summarize, and send emails — but never holds your Google credentials.**
 
