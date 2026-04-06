@@ -310,7 +310,8 @@ export class OpenClawConnection {
   }
 
   /**
-   * Send a message with streaming — calls onDelta for each token, resolves with full text on completion.
+   * Send a message with streaming — uses agent method + session subscription
+   * to get token-by-token deltas while still getting the final response.
    * @param {string} message
    * @param {{ onDelta?: (delta: string, fullText: string) => void }} opts
    * @returns {Promise<{ text: string, meta: object }>}
@@ -319,73 +320,52 @@ export class OpenClawConnection {
     if (!this.connected) await this.connect();
 
     const sessionKey = "agent:gmail-agent:main";
+    const onDelta = opts.onDelta || (() => {});
 
-    // Subscribe if not already
+    // Subscribe to session events for streaming deltas
     if (this._subscribedSession !== sessionKey) {
       await this.subscribeSession(sessionKey);
     }
 
-    const onDelta = opts.onDelta || (() => {});
-
     return new Promise((resolve, reject) => {
       let fullText = "";
-      let runId = null;
-
       const timer = setTimeout(() => {
-        cleanup();
+        this._streamHandler = null;
         reject(new Error("Stream query timed out (120s)"));
       }, 120_000);
 
-      const cleanup = () => {
-        clearTimeout(timer);
-        this._streamHandler = null;
-      };
-
-      // Set up event handler for streaming
+      // Handle streaming events
       this._streamHandler = (frame) => {
         if (frame.type !== "event" || frame.event !== "agent") return;
-
         const payload = frame.payload;
-        if (payload.sessionKey !== sessionKey) return;
 
-        // Track the run
-        if (!runId && payload.runId) runId = payload.runId;
-
-        // Delta — incremental text
+        // Delta text
         if (payload.stream === "assistant" && payload.data?.delta) {
           fullText = payload.data.text || (fullText + payload.data.delta);
           onDelta(payload.data.delta, fullText);
           return;
         }
 
-        // Final — agent run completed
-        if (payload.stream === "final" || payload.state === "final") {
-          cleanup();
-          resolve({
-            text: fullText || payload.data?.text || "",
-            meta: { runId, durationMs: payload.durationMs },
-          });
-          return;
-        }
-
-        // Error
-        if (payload.stream === "error" || payload.state === "error") {
-          cleanup();
-          reject(new Error(payload.errorMessage || payload.data?.text || "Stream error"));
+        // Lifecycle end = done
+        if (payload.stream === "lifecycle" && payload.data?.phase === "end") {
+          clearTimeout(timer);
+          this._streamHandler = null;
+          resolve({ text: fullText, meta: { durationMs: payload.durationMs } });
           return;
         }
       };
 
-      // Send the message
+      // Fire the agent request (don't await — response comes via events)
       this.ws.send(
         JSON.stringify({
           type: "req",
           id: crypto.randomUUID(),
-          method: "sessions.send",
+          method: "agent",
           params: {
-            key: sessionKey,
             message,
+            agentId: "gmail-agent",
             idempotencyKey: crypto.randomUUID(),
+            channel: "webchat",
           },
         })
       );
